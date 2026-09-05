@@ -4,10 +4,14 @@ const prisma = require("../db");
 const { requireAuth, requireAdmin } = require("../middleware/auth");
 
 const router = express.Router();
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+
+function getRazorpay() {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) return null;
+  return new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+  });
+}
 
 const STAGE_ORDER = ["PLACED", "CONFIRMED", "SHIPPED", "OUT_FOR_DELIVERY", "DELIVERED"];
 
@@ -29,6 +33,13 @@ router.post("/", requireAuth, async (req, res) => {
   const shipping = total > 999 ? 0 : 79;
   const grandTotal = total + shipping;
 
+  if (paymentMethod !== "cod") {
+    const razorpay = getRazorpay();
+    if (!razorpay) {
+      return res.status(503).json({ error: "Online payment isn't set up yet. Please choose Cash on Delivery, or ask the site admin to add Razorpay keys." });
+    }
+  }
+
   const order = await prisma.order.create({
     data: {
       userId: req.user.id, total: grandTotal, shipping, paymentMethod,
@@ -47,6 +58,7 @@ router.post("/", requireAuth, async (req, res) => {
 
   if (paymentMethod === "cod") return res.status(201).json({ order, razorpayOrder: null });
 
+  const razorpay = getRazorpay();
   const razorpayOrder = await razorpay.orders.create({ amount: grandTotal * 100, currency: "INR", receipt: order.id });
   await prisma.order.update({ where: { id: order.id }, data: { razorpayOrderId: razorpayOrder.id } });
 
