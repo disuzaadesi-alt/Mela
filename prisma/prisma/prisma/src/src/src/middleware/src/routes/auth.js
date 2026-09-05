@@ -13,7 +13,6 @@ function makeToken(user) {
   );
 }
 
-// POST /api/auth/signup
 router.post("/signup", async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
@@ -29,14 +28,14 @@ router.post("/signup", async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
+  const isAdmin = process.env.ADMIN_EMAIL && email.toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase();
   const user = await prisma.user.create({
-    data: { name, email, passwordHash },
+    data: { name, email, passwordHash, isAdmin: !!isAdmin },
   });
 
   res.status(201).json({ token: makeToken(user), user: { id: user.id, name: user.name, email: user.email, isAdmin: user.isAdmin } });
 });
 
-// POST /api/auth/login
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
